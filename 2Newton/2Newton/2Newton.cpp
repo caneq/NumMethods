@@ -48,9 +48,8 @@ void calcJInc(double J[][2], const double &x1, const double &x2) {
 int newton(double& x1, double& x2, double e1, double e2, int NIT) {
 	int k = 1;
 	cout << left << setw(4) << "k" << setw(20) << "d1" << setw(20) << "d2" << setw(20) << "x1" << setw(20) << "x2" << endl;
-	double F[2];
-	double J[2][2];
-	double dx[2];
+	double F[2], J[2][2];
+	double dx[2] = { 0 };
 	double x1k, x2k;
 	double d1, d2;
 	double tmp;
