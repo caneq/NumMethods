@@ -1,16 +1,18 @@
 ﻿#include "pch.h"
 #include <iostream>
+#include <vector>
 #include <iomanip>
+#include <string>
 using namespace std;
 
+typedef double(*func)(const vector<double>&);
 
-int gaus(double A[][2], double* B, int n, double* res);
-double f1(double x1, double x2) {
-	return 2 * x1*x1*x1 - x2 * x2 - 1;
+double f1(const vector<double>& x) {
+	return 2 * x[0] * x[0] * x[0] - x[1] * x[1] - 1;
 }
 
-double f2(double x1, double x2) {
-	return x1 * x2*x2*x2 - x2 - 4;
+double f2(const vector<double>& x) {
+	return x[0] * x[1] * x[1] * x[1] - x[1] - 4;
 }
 
 double df1x1(double x1, double x2) {
@@ -27,6 +29,46 @@ double df2x2(double x1, double x2) {
 	return 3 * x1 * x2*x2 - 1;
 }
 
+int gaus(vector<vector<double>> A, vector<double> B, vector<double>& res) {
+	int n = B.size();
+	if (res.size() != B.size()) {
+		res = B;
+	}
+
+	for (int k = 0; k < n; k++) {
+		int max = k;
+		for (int i = k + 1; i < n; i++) {
+			if (fabs(A[i][k]) > fabs(A[max][k])) max = i;
+		}
+		if (k != max) {
+			swap(A[k], A[max]);
+			swap(B[k], B[max]);
+		}
+		double AMAIN = A[k][k];
+		if (fabs(AMAIN) <= DBL_EPSILON) {
+			return 1;
+		}
+
+		for (int j = k; j < n; j++) {
+			A[k][j] /= AMAIN;
+		}
+		B[k] /= AMAIN;
+		for (int i = k + 1; i < n; i++) {
+			double kef = A[i][k];
+			for (int j = k; j < n; j++) {
+				A[i][j] -= A[k][j] * kef;
+			}
+			B[i] -= B[k] * kef;
+		}
+	}
+	for (int i = n - 1; i >= 0; i--) {
+		res[i] = B[i];
+		for (int j = i + 1; j < n; j++) {
+			res[i] -= A[i][j] * res[j];
+		}
+	}
+	return 0;
+}
 
 void calcJAn(double J[][2], const double &x1, const double &x2) {
 	J[0][0] = df1x1(x1, x2);
@@ -35,46 +77,78 @@ void calcJAn(double J[][2], const double &x1, const double &x2) {
 	J[1][1] = df2x2(x1, x2);
 }
 
-void calcJInc(double J[][2], const double &x1, const double &x2) {
+void calcJInc(vector<vector<double>>& J, const vector<func> &f, vector<double> x) {
+	J.clear();
+	J.reserve(f.size());
 	const double M = 0.01;
-	const double x1M = x1 * M;
-	const double x2M = x2 * M;
-	J[0][0] = (f1(x1 + x1M, x2) - f1(x1, x2)) / x1M;
-	J[0][1] = (f1(x1, x2 + x2M) - f1(x1, x2)) / x2M;
-	J[1][0] = (f2(x1 + x1M, x2) - f2(x1, x2)) / x1M;
-	J[1][1] = (f2(x1, x2 + x2M) - f2(x1, x2)) / x2M;
+	for (int i = 0; i < f.size(); i++) {
+		double xM = x[i] * M;
+		for (int j = 0; j < f.size(); j++) {
+			vector<double> tmp;
+			J.push_back(tmp);
+			double fx = f[j](x);
+			x[i] += xM;
+			J[j].push_back((f[j](x) - fx) / xM);
+			x[i] -= xM;
+		}
+	}
 }
 
-int newton(double& x1, double& x2, double e1, double e2, int NIT) {
+int newton(const vector<func> &f, vector<double>& x, double e1, double e2, int NIT) {
+	cout << left << setw(4) << "k" << setw(20) << "d1" << setw(20) << "d2";
+	string xString("x");
+	for (int i = 0; i < f.size(); i++) {
+		cout << setw(20) << (xString + to_string(i));
+	}
+	cout << endl;
 	int k = 1;
-	cout << left << setw(4) << "k" << setw(20) << "d1" << setw(20) << "d2" << setw(20) << "x1" << setw(20) << "x2" << endl;
-	double F[2], J[2][2];
-	double dx[2] = { 0 };
-	double x1k, x2k;
+	vector<double> F = x;
+	if (x.size() != f.size()) {
+		x.clear();
+		x.reserve(f.size());
+		for (int i = 0; i < f.size(); i++) {
+			x.push_back(0.0);
+		}
+	}
+	vector<vector<double>> J;
+	vector<double> dx;
+	vector<double> resk = x;
 	double d1, d2;
-	double tmp;
 	do {
-		F[0] = -f1(x1, x2); F[1] = -f2(x1, x2);
-		calcJInc(J, x1, x2);
+		for (int i = 0; i < f.size(); i++) {
+			F[i] = -f[i](x);
+		}
+		calcJInc(J, f, x);
 
-		gaus(J, F, 2, dx);
+		gaus(J, F, dx);
 
+		for (int i = 0; i < resk.size(); i++) {
+			resk[i] = x[i] + dx[i];
+		}
 
-		x1k = x1 + dx[0];
-		x2k = x2 + dx[1];
+		d1 = DBL_MIN;
+		for (int i = 0; i < x.size(); i++) {
+			double tmp = fabs(f[i](x));
+			if (tmp > d1) d1 = tmp;
+		}
 
-		d1 = fabs(f1(x1, x2));
-		tmp = fabs(f2(x1, x2));
-		if (tmp > d1) d1 = tmp;
+		d2 = DBL_MIN;
+		for (int i = 0; i < resk.size(); i++) {
+			double tmp = fabs(resk[i] - x[i]);
+			if (resk[i] >= 1) {
+				tmp /= resk[i];
+			}
 
-		d2 = fabs(x1k - x1) / (x1k >= 1 ? x1k : 1);
-		tmp = fabs(x2k - x2) / (x2k >= 1 ? x2k : 1);
-		if (tmp > d2) d2 = tmp;
+			if (tmp > d2) d2 = tmp;
+		}
 
-		x1 = x1k;
-		x2 = x2k;
+		x = resk;
 
-		cout << left << setw(4) << k << setw(20) << d1 << setw(20) << d2 << setw(20) << x1 << setw(20) << x2 << endl;
+		cout << left << setw(4) << k << setw(20) << d1 << setw(20) << d2;
+		for (int i = 0; i < f.size(); i++) {
+			cout << setw(20) << x[i];
+		}
+		cout << endl;
 		if (k >= NIT) {
 			cout << "IER = 2\n";
 			return 2;
@@ -86,71 +160,9 @@ int newton(double& x1, double& x2, double e1, double e2, int NIT) {
 }
 
 int main() {
-	double x1 = 1;
-	double x2 = 1;
-	newton(x1, x2, 1e-9, 1e-9, 1000);
-	cout << "\nx1 = " << setprecision(15) << setw(26) << x1 << "x2 = " << setw(26) << x2 << endl;
-}
-
-int gaus(double A[][2], double* B, int n, double* res) {
-
-	double* B1 = new double[n];
-	for (int i = 0; i < n; i++) {
-		B1[i] = B[i];
-	}
-	double** A1 = new double*[n];
-	for (int i = 0; i < n; i++) {
-		A1[i] = new double[n];
-	}
-	for (int i = 0; i < n; i++) {
-		for (int j = 0; j < n; j++) {
-			A1[i][j] = A[i][j];
-		}
-	}
-
-	//Прямой ход:
-	for (int k = 0; k < n; k++) {
-		int max = k;
-		for (int i = k + 1; i < n; i++) {
-			if (fabs(A1[i][k]) > fabs(A1[max][k])) max = i;
-		}
-		if (k != max) {
-			swap(A1[k], A1[max]);
-			swap(B1[k], B1[max]);
-			//print(A1, B1, n);
-		}
-		double AMAIN = A1[k][k];
-		if (fabs(AMAIN) <= DBL_EPSILON) {
-			for (int i = 0; i < n; i++) delete[] A1[i];
-			delete[] A1;
-			delete[] B1;
-			return 1; //корней нет или их бесконечно много
-		}
-
-		for (int j = k; j < n; j++) {
-			A1[k][j] /= AMAIN;
-		}
-		B1[k] /= AMAIN;
-		//print(A1, B1, n);
-		for (int i = k + 1; i < n; i++) {
-			double kef = A1[i][k];
-			for (int j = k; j < n; j++) {
-				A1[i][j] -= A1[k][j] * kef;
-			}
-			B1[i] -= B1[k] * kef;
-		}
-		//print(A1, B1, n);
-	}
-
-	//Обратный ход:
-	for (int i = n - 1; i >= 0; i--) {
-		res[i] = B1[i];
-		for (int j = i + 1; j < n; j++) {
-			res[i] -= A1[i][j] * res[j];
-		}
-	}
-	for (int i = 0; i < n; i++) delete[] A1[i];
-	delete[] A1;
-	delete[] B1;
+	vector<func> f; f.push_back(f1); f.push_back(f2);
+	vector<double> x; x.push_back(1); x.push_back(1);
+	newton(f, x, 1e-10, 1e-10, 1000);
+	cout << "\nx1 = " << setprecision(15) << setw(26) << x[0] << "x2 = " << setw(26) << x[1] << endl;
 	return 0;
 }
