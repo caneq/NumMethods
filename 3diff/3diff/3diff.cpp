@@ -1,265 +1,111 @@
 ﻿#include "pch.h"
+#include "EulerMethods.h"
 #include <iostream>
 #include <vector>
 #include <iomanip>
+#include <fstream>
 using namespace std;
 
 typedef double(*func)(const vector<double> &, double);
 
-int newton(const vector<func> &f, const vector<double>& yk, vector<double> &ykPlus1,
-	double tauK, double tKplus1, double e1, double e2, int NIT);
+void plot(const vector<vector<double>>& explicitPoints, const vector<vector<double>>& implicitPoints) {
+	ofstream imp("implicitPoints.txt");
+	ofstream exp("explicitPoints.txt");
+
+	for (int i = 0; i < explicitPoints[0].size(); i++) {
+		for (int j = 0; j < explicitPoints.size(); j++) {
+			exp << explicitPoints[j][i] << " ";
+		}
+		exp << "\n";
+	}
+
+	for (int i = 0; i < implicitPoints[0].size(); i++) {
+		for (int j = 0; j < implicitPoints.size(); j++) {
+			imp << implicitPoints[j][i] << " ";
+		}
+		imp << "\n";
+	}
+
+	imp.close();
+	exp.close();
+}
 
 double f1(const vector<double> &yk, double tk) {
-	return -2 * yk[0] + tk * tk;
+	//return -yk[0] * yk[1] + sin(tk) / tk;
+	//return -yk[0] * yk[1] + 1 - tk*tk/6 + tk*tk*tk*tk/25;
+	//return yk[1] - (2 * yk[0] + tk * yk[1])*yk[0];
+	return  2 * yk[1] * yk[2];
 }
 
 double f2(const vector<double> &yk, double tk) {
-	return -yk[1] * yk[1] /*+ tk/(1 + tk*tk)*/;
+	//return -yk[1] * yk[1] + tk/(1 + tk*tk);
+	//return exp(yk[0]) - (yk[0] + 2 * yk[1])*yk[0];
+	return 1.5* yk[0] * yk[2];
 }
 
-void explicitEulerMethod(const vector<func> &f, double T, double epsI, double tauMax, const vector<double> &u) {
-	double tk = 0;
-	vector<double> yk = u;
-	int N = yk.size();
-	for (int i = 0; i < N; i++) {
-		cout << setw(13) << "y" << i + 1;
-	}
-	cout << setw(13) << "tk\n";
-	while (tk < T) {
-		double tauK = DBL_MAX;
-		for (int i = 0; i < N; i++) {
-			double tmp = epsI / (fabs(f[i](yk, tk)) + epsI / tauMax);
-			if (tmp < tauK) tauK = tmp;
-		}
-
-		for (int i = 0; i < N; i++) yk[i] += tauK * f[i](yk, tk);
-		tk += tauK;
-
-		for (int i = 0; i < N; i++) cout << setw(14) << yk[i];
-		cout << setw(14) << tk << endl;
-	}
+double f3(const vector<double> &yk, double tk) {
+	//return -yk[1] * yk[1] + tk / (1 + tk * tk);
+	//return exp(yk[0]) - (yk[0] + 2 * yk[1])*yk[0];
+	return -1*yk[0] * yk[1];
 }
 
+double A[3][3];
+double b[3];
 
-double calcTauKplus1Opt(const double& epsI, vector<double> epsK, const double& tauK) {
-	double res = DBL_MAX;
-	for (int i = 0; i < epsK.size(); i++) {
-		double tmp = sqrt(epsI / fabs(epsK[i])) * tauK;
-		if (tmp < tauK) res = tmp;
-	}
-	return res;
+double hf1(const vector<double> &yk, double tk) {
+	return  A[0][0] * yk[0] + A[0][1] * yk[1] + A[0][2] * yk[2] - b[0];
+}
+double hf2(const vector<double> &yk, double tk) {
+	return  A[1][0] * yk[0] + A[1][1] * yk[1] + A[1][2] * yk[2] - b[1];
+}
+double hf3(const vector<double> &yk, double tk) {
+	return  A[2][0] * yk[0] + A[2][1] * yk[1] + A[2][2] * yk[2] - b[2];
 }
 
-double calcTauKplus1Three(const double& epsI, vector<double> epsK, const double& tauK) {
-	double res = DBL_MAX;
-	const double epsIDiv4 = epsI / 4;
-	for (int i = 0; i < epsK.size(); i++) {
-		double tmp;
-		double absEpsKi = fabs(epsK[i]);
-		if (absEpsKi > epsI) {
-			tmp = tauK / 2;
-		}
-		else if (epsIDiv4 < absEpsKi && absEpsKi <= epsI) {
-			tmp = tauK;
-		}
-		else {
-			tmp = 2 * tauK;
-		}
-		if (tmp < res) res = tmp;
-	}
+void hard() {
+	double lambda[3] = { -100,-20,-30 };
 
-	return res;
+	A[0][0] = (2 * lambda[0] + 4 * lambda[1]) / 6;
+	A[0][1] = A[0][2] = A[1][0] = A[2][0] = 2 * (lambda[0] - lambda[1]) / 6;
+	A[1][1] = A[2][2] = (2 * lambda[0] + lambda[1] + 3 * lambda[2]) / 6;
+	A[1][2] = A[2][1] = (2 * lambda[0] + lambda[1] - 3 * lambda[2]) / 6;
+	b[0] = -(4 * lambda[0] + 2 * lambda[1]) / 6;
+	b[1] = -(4 * lambda[0] - lambda[1] - 9 * lambda[2]) / 6;
+	b[2] = -(4 * lambda[0] - lambda[1] + 9 * lambda[2]) / 6;
+
+	vector<func> f; f.push_back(hf1); f.push_back(hf2); f.push_back(hf3);
+	vector<double> u0; 	u0.push_back(10); u0.push_back(22), u0.push_back(9);
+	vector<vector<double>> explicitPoints, implicitPoints;
+	vector<double> point0; point0.push_back(0);
+	for (auto i : u0) {
+		point0.push_back(i);
+	}
+	explicitPoints.push_back(point0);
+	implicitPoints.push_back(point0);
+	double T = 1;
+	explicitEulerMethod(f, T, 1e-2, 1, u0, explicitPoints);
+	implicitEulerMethod(f, T, 1e-2, 0.001, 1, u0, implicitPoints);
+	plot(explicitPoints, implicitPoints);
 }
 
-void implicitEulerMethod(const vector<func> &f, double T, double epsI, double tauMin,
-	double tauMax, const vector<double> &u) {
-
-	double tk = 0;
-	double tkPlus1 = 0;
-
-	vector<double> yk = u;
-	vector<double> ykMinus1 = u;
-	vector<double> ykPlus1 = u;
-
-	double tauK, tauKminus1;
-	tauK = tauKminus1 = tauMin;
-
-	int N = yk.size();
-	for (int i = 0; i < N; i++) {
-		cout << setw(13) << "y" << i + 1;
+void usual() {
+	vector<func> f; f.push_back(f1); f.push_back(f2); f.push_back(f3);
+	vector<double> u0; 	u0.push_back(1.0); u0.push_back(1), u0.push_back(1);
+	vector<vector<double>> explicitPoints, implicitPoints;
+	vector<double> point0; point0.push_back(0);
+	for (auto i : u0) {
+		point0.push_back(i);
 	}
-	cout << setw(13) << "tk\n";
-
-
-
-	while (tk < T) {
-		tkPlus1 = tk + tauK;
-		newton(f, yk, ykPlus1, tauK, tkPlus1, 1e-8, 1e-8, 100);
-
-		vector<double> epsK;
-		epsK.reserve(f.size());
-		for (int i = 0; i < f.size(); i++) {
-			epsK.push_back(-tauK / (tauK + tauKminus1) * (ykPlus1[i] - yk[i] - tauK / tauKminus1 * (yk[i] - ykMinus1[i])));
-		}
-
-		bool flag = false;
-		for (int i = 0; i < epsK.size(); i++) {
-			if (fabs(epsK[i]) > epsI) {
-				flag = true;
-				break;
-			}
-		}
-
-		if (flag) {
-			tauK /= 2;
-			tkPlus1 = tk;
-			ykPlus1 = yk;
-		}
-		else {
-			double tauKplus1 = calcTauKplus1Opt(epsI, epsK, tauK);
-			if (tauKplus1 > tauMax) tauKplus1 = tauMax;
-			//if (tauKplus1 < tauMin) tauKplus1 = tauMin;
-
-			for (int i = 0; i < N; i++) cout << setw(14) << ykPlus1[i];
-			cout << setw(14) << tkPlus1 << endl;
-			ykMinus1 = yk;
-			yk = ykPlus1;
-			tauKminus1 = tauK;
-			tauK = tauKplus1;
-			tk = tkPlus1;
-		}
-	}
-
+	explicitPoints.push_back(point0);
+	implicitPoints.push_back(point0);
+	explicitEulerMethod(f, 1, 1e-3, 0.1, u0, explicitPoints);
+	implicitEulerMethod(f, 1, 1e-3, 0.001, 0.1, u0, implicitPoints);
+	plot(explicitPoints, implicitPoints);
 }
+
 
 int main() {
-	vector<func> f;
-	f.push_back(f1);
-	//f.push_back(f2);
-	vector<double> u0;
-	u0.push_back(1.0);
-	//u0.push_back(-0.412);
-	//explicitEulerMethod(f, 1, 1e-3, 0.1, u0);
-	implicitEulerMethod(f, 1, 1e-3, 1e-6, 0.8, u0);
+	hard();
+	//usual();
 
-}
-
-
-int gaus(vector<vector<double>> A, vector<double> B, vector<double>& res) {
-	int n = B.size();
-	if (res.size() != B.size()) {
-		res = B;
-	}
-
-	for (int k = 0; k < n; k++) {
-		int max = k;
-		for (int i = k + 1; i < n; i++) {
-			if (fabs(A[i][k]) > fabs(A[max][k])) max = i;
-		}
-		if (k != max) {
-			swap(A[k], A[max]);
-			swap(B[k], B[max]);
-		}
-		double AMAIN = A[k][k];
-		if (fabs(AMAIN) <= DBL_EPSILON) {
-			return 1;
-		}
-
-		for (int j = k; j < n; j++) {
-			A[k][j] /= AMAIN;
-		}
-		B[k] /= AMAIN;
-		for (int i = k + 1; i < n; i++) {
-			double kef = A[i][k];
-			for (int j = k; j < n; j++) {
-				A[i][j] -= A[k][j] * kef;
-			}
-			B[i] -= B[k] * kef;
-		}
-	}
-	for (int i = n - 1; i >= 0; i--) {
-		res[i] = B[i];
-		for (int j = i + 1; j < n; j++) {
-			res[i] -= A[i][j] * res[j];
-		}
-	}
-	return 0;
-}
-
-double function(const vector<func> &f, vector<double> yk, vector<double> ykPlus1,
-	double tauK, double tKplus1, int i) {
-	return ykPlus1[i] - yk[i] - tauK * f[i](ykPlus1, tKplus1);
-}
-
-
-void calcJInc(vector<vector<double>>& J, const vector<func> &f, vector<double> yk, vector<double> ykPlus1,
-	double tauK, double tKplus1) {
-	J.clear();
-	J.reserve(f.size());
-	const double M = 0.01;
-	for (int i = 0; i < f.size(); i++) {
-		double xM = ykPlus1[i] * M;
-		for (int j = 0; j < f.size(); j++) {
-			vector<double> tmp;
-			J.push_back(tmp);
-			double fx = function(f, yk, ykPlus1, tauK, tKplus1,j);
-			ykPlus1[i] += xM;
-			J[j].push_back((function(f, yk, ykPlus1, tauK, tKplus1, j) - fx) / xM);
-			ykPlus1[i] -= xM;
-		}
-	}
-}
-
-int newton(const vector<func> &f, const vector<double>& yk, vector<double> &ykPlus1,
-	double tauK, double tKplus1, double e1, double e2, int NIT) {
-	int k = 1;
-	vector<double> F = yk;
-	if (ykPlus1.size() != f.size()) {
-		ykPlus1.clear();
-		ykPlus1.reserve(f.size());
-		for (int i = 0; i < f.size(); i++) {
-			ykPlus1.push_back(0.0);
-		}
-	}
-	vector<vector<double>> J;
-	vector<double> dx;
-	vector<double> resk = ykPlus1;
-	double d1, d2;
-	do {
-		for (int i = 0; i < f.size(); i++) {
-			F[i] = -function(f, yk, ykPlus1, tauK, tKplus1, i);
-		}
-		calcJInc(J, f, yk, ykPlus1, tauK, tKplus1);
-
-		gaus(J, F, dx);
-
-		for (int i = 0; i < resk.size(); i++) {
-			resk[i] = ykPlus1[i] + dx[i];
-		}
-
-		d1 = DBL_MIN;
-		for (int i = 0; i < ykPlus1.size(); i++) {
-			double tmp = fabs(function(f, yk, ykPlus1, tauK, tKplus1, i));
-			if (tmp > d1) d1 = tmp;
-		}
-
-		d2 = DBL_MIN;
-		for (int i = 0; i < resk.size(); i++) {
-			double tmp = fabs(resk[i] - ykPlus1[i]);
-			if (resk[i] >= 1) {
-				tmp /= resk[i];
-			}
-
-			if (tmp > d2) d2 = tmp;
-		}
-
-		ykPlus1 = resk;
-
-		if (k >= NIT) {
-			return 2;
-		}
-		k++;
-	} while (d1 > e1 && d2 > e2);
-	cout << setw(100) << k << endl;
-	return 0;
 }
