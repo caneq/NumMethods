@@ -81,11 +81,11 @@ void calcJInc(vector<vector<double>>& J, const vector<func> &f, vector<double> x
 	J.clear();
 	J.reserve(f.size());
 	const double M = 0.01;
+	vector<double> tmp;
+	for (int i = 0; i < f.size(); i++) J.push_back(tmp);
 	for (int i = 0; i < f.size(); i++) {
 		double xM = x[i] * M;
 		for (int j = 0; j < f.size(); j++) {
-			vector<double> tmp;
-			J.push_back(tmp);
 			double fx = f[j](x);
 			x[i] += xM;
 			J[j].push_back((f[j](x) - fx) / xM);
