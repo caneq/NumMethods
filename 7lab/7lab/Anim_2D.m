@@ -42,7 +42,8 @@ for i=2:NT+1
     y=1:NY; 
     [yy, xx] = meshgrid(y,x); 
     surf(xx, yy, U) 
-    axis([1 NX 1 NY 0 15]) 
+    axis([1 NX 1 NY 0 15])
+    view(0,45);
     title(['n=',num2str(i),' N=',num2str(NT+1)]) 
     fclose (fid); pause (0.025); 
 end
